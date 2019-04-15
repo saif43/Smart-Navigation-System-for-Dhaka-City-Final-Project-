@@ -1,0 +1,1 @@
+[05-Oct-2018 21:42:57 UTC] PHP Warning:  mysqli::__construct(): (HY000/1045): Access denied for user 'root'@'localhost' (using password: NO) in /home/pointerr/gps.pointerror.com/save/all_bus_stop.php on line 7

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Place Autocomplete</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      .controls {
+        margin-top: 10px;
+        border: 1px solid transparent;
+        border-radius: 2px 0 0 2px;
+        box-sizing: border-box;
+        -moz-box-sizing: border-box;
+        height: 32px;
+        outline: none;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      #origin-input,
+      #destination-input {
+        background-color: #fff;
+        font-family: Roboto;
+        font-size: 15px;
+        font-weight: 300;
+        margin-left: 12px;
+        padding: 0 11px 0 13px;
+        text-overflow: ellipsis;
+        width: 200px;
+      }
+
+      #origin-input:focus,
+      #destination-input:focus {
+        border-color: #4d90fe;
+      }
+
+      #mode-selector {
+        color: #fff;
+        background-color: #4d90fe;
+        margin-left: 12px;
+        padding: 5px 11px 0px 11px;
+      }
+
+      #mode-selector label {
+        font-family: Roboto;
+        font-size: 13px;
+        font-weight: 300;
+      }
+
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.js"></script>
+  </head>
+  <body >
+    <input id="origin-input" class="controls" type="text"
+        placeholder="Enter an origin location">
+
+    <input id="destination-input" class="controls" type="text"
+        placeholder="Enter a destination location">
+
+    <div id="mode-selector" class="controls">
+      <input type="radio" name="type" id="changemode-walking" checked="checked">
+      <label for="changemode-walking">Walking</label>
+
+      <input type="radio" name="type" id="changemode-transit">
+      <label for="changemode-transit">Transit</label>
+
+      <input type="radio" name="type" id="changemode-driving">
+      <label for="changemode-driving">Driving</label>
+
+      <button onclick="get_source_destination_nearest()">Test</button>
+    </div>
+  
+    <div style="width: 70%;"  id="map"></div>
+    <div id="info"  style="width: 30%;">
+      
+    </div>
+
+    <script>
+      // This example requires the Places library. Include the libraries=places
+      // parameter when you first load the API. For example:
+      // <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places">
+      var source,destination,map;
+  
+      function initMap() {
+         map = new google.maps.Map(document.getElementById('map'), {
+          mapTypeControl: false,
+          center: {lat:23.744114,lng:90.3756356},
+          zoom: 15
+        });
+
+        new AutocompleteDirectionsHandler(map);
+      }
+
+       /**
+        * @constructor
+       */
+      
+      function AutocompleteDirectionsHandler(map) {
+        this.map = map;
+        this.originPlaceId = null;
+        this.destinationPlaceId = null;
+        this.travelMode = 'WALKING';
+        var originInput = document.getElementById('origin-input');
+        var destinationInput = document.getElementById('destination-input');
+        var modeSelector = document.getElementById('mode-selector');
+        this.directionsService = new google.maps.DirectionsService;
+        this.directionsDisplay = new google.maps.DirectionsRenderer;
+        this.directionsDisplay.setMap(map);
+
+        var originAutocomplete = new google.maps.places.Autocomplete(
+            originInput, {geometry: true});
+        var destinationAutocomplete = new google.maps.places.Autocomplete(
+            destinationInput, {geometry: true});
+
+
+        this.setupClickListener('changemode-walking', 'WALKING');
+        this.setupClickListener('changemode-walking', 'WALKING');
+        this.setupClickListener('changemode-transit', 'TRANSIT');
+        this.setupClickListener('changemode-driving', 'DRIVING');
+
+        this.setupPlaceChangedListener(originAutocomplete, 'ORIG');
+        this.setupPlaceChangedListener(destinationAutocomplete, 'DEST');
+
+        this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(originInput);
+        this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(destinationInput);
+        this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(modeSelector);
+      }
+
+      // Sets a listener on a radio button to change the filter type on Places
+      // Autocomplete.
+      AutocompleteDirectionsHandler.prototype.setupClickListener = function(id, mode) {
+        var radioButton = document.getElementById(id);
+        var me = this;
+        radioButton.addEventListener('click', function() {
+          me.travelMode = mode;
+          me.route();
+        });
+      };
+
+      AutocompleteDirectionsHandler.prototype.setupPlaceChangedListener = function(autocomplete, mode) {
+        var me = this;
+        autocomplete.bindTo('bounds', this.map);
+        autocomplete.addListener('place_changed', function() {
+        var place = autocomplete.getPlace();
+
+          if (!place.place_id) {
+            window.alert("Please select an option from the dropdown list.");
+            return;
+          }
+          if (mode === 'ORIG') {
+            me.originPlaceId = place.place_id;
+            source = {
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng()
+            };
+            console.log(source);
+           
+          } else {
+            me.destinationPlaceId = place.place_id;
+             destination = {
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng()
+            };
+            console.log(destination);
+          }
+          
+        });
+
+      };
+
+      function get_source_destination_nearest(){
+
+        var colors = ['#ff2d37','#1769ff','#34bf49','#8e43e7'];
+
+        var sourcenearBusStopdetails= find_near_BusStop_latlng(source);
+        var sourceBusStop ={
+           lat : parseFloat(sourcenearBusStopdetails.latlng.lat),
+           lng : parseFloat(sourcenearBusStopdetails.latlng.lng)
+        };
+
+        console.log(sourcenearBusStopdetails.busstopid);
+        var sorce_busstopid = sourcenearBusStopdetails.busstopid;
+         
+
+        var destinationnearBusStopdetails= find_near_BusStop_latlng(destination);
+        var destinationBusStop ={
+           lat : parseFloat(destinationnearBusStopdetails.latlng.lat),
+           lng : parseFloat(destinationnearBusStopdetails.latlng.lng)
+        };
+
+        console.log(destinationnearBusStopdetails.busstopid);
+        var destination_busstopid = destinationnearBusStopdetails.busstopid;
+
+
+        // Instantiate a directions service.
+        directionsService = new google.maps.DirectionsService,
+        directionsDisplay = new google.maps.DirectionsRenderer({
+          map: map,
+          suppressMarkers: true
+        });
+
+        if(sourcenearBusStopdetails.distance <= 100){
+
+          new google.maps.Marker({
+                  position: source,
+                  map: map,
+                  icon:"img/source_32.png",
+                  title: "Near BusStop"
+                });
+
+        }else{
+
+          new google.maps.Marker({
+                  position: source,
+                  map: map,
+                  icon:"img/source_32.png",
+                  title: "Near BusStop"
+                });
+          calculateAndDisplayRoute(directionsService, directionsDisplay, source, sourceBusStop);
+
+        }
+
+
+        if(destinationnearBusStopdetails.distance <= 100){
+
+           new google.maps.Marker({
+                  position: destination,
+                  map: map,
+                  icon:"img/destination_32.png",
+                  title: "Near BusStop"
+                });
+
+        }else{
+
+          new google.maps.Marker({
+                  position: destination,
+                  map: map,
+                  icon:"img/destination_32.png",
+                  title: "Near BusStop"
+                });
+          calculateAndDisplayRoute(directionsService, directionsDisplay, destination, destinationBusStop);
+
+        }
+
+        function calculateAndDisplayRoute(directionsService, directionsDisplay, pointA, pointB) {
+            directionsService.route({
+              origin: pointA,
+              destination: pointB,
+              provideRouteAlternatives: true,
+              travelMode: google.maps.TravelMode.WALKING,
+              unitSystem: google.maps.UnitSystem.METRIC
+            }, function(response, status) {
+              if (status == google.maps.DirectionsStatus.OK) {
+
+                //sort distance btwn routes
+                var index = 0;
+                var value = 999999;
+                var lent = response.routes.length;
+
+                for (var i = 0; i < lent; i++) {
+                  if (response.routes[i].legs[0].distance.value < value) {
+                    value = response.routes[i].legs[0].distance.value;
+                    index = i;
+                  }
+                }
+
+                 new google.maps.DirectionsRenderer({
+                    map: map,
+                    suppressMarkers: true,
+                    directions: response,
+                    routeIndex: i,
+                    polylineOptions:{strokeColor:colors[i],strokeWeight:4,strokeOpacity:0.8}
+
+                  });
+                  var x =index+1;
+                  var center_point = response.routes[index].overview_path.length/2;
+                  var infowindow2 = new google.maps.InfoWindow();
+                  if(response.routes[index].legs[0].distance.value <= 500){
+                    infowindow2.setContent(response.routes[index].legs[0].distance.text + "<br>" + response.routes[index].legs[0].duration.text + " <br>" + "Travel: Walking");
+                  }
+                  else if(response.routes[index].legs[0].distance.value > 500 && response.routes[index].legs[0].distance.value <= 3000){
+                    infowindow2.setContent(response.routes[index].legs[0].distance.text + "<br>" + response.routes[index].legs[0].duration.text + " <br>" + "Travel: Rickshaw");
+                  }
+                  else{
+                    infowindow2.setContent(response.routes[index].legs[0].distance.text + "<br>" + response.routes[index].legs[0].duration.text + " <br>" + "Travel: Others");
+                  }
+                  infowindow2.setPosition(response.routes[index].overview_path[center_point|index]);
+                  infowindow2.open(map);
+                  
+                //}
+
+                new google.maps.Marker({
+                  position: pointB,
+                  map: map,
+                  icon:"img/bus_stop_32.png",
+                  title: "Near BusStop"
+                });
+                
+              } else {
+                window.alert('Directions request failed due to ' + status);
+              }
+            });
+          }
+
+
+        var abc = new Array();
+        var bus_services_sorce =  $.ajax({
+                        type: 'POST',
+                        url: 'save/get_bus_from_busstop.php', 
+                        data:{sid:sorce_busstopid , did:destination_busstopid},
+                        async: false,
+                        success: function(msg) {
+                          if (msg) {
+                            //console.log(msg);           
+                          } else {
+                            console.log("Not Get"); 
+                          }
+                        }
+                  }).responseText;
+
+        //console.log(bus_services_sorce);  
+
+         abc=JSON.parse(bus_services_sorce);
+         console.log(abc);
+         var flag = 0;
+        var mainpath = [];
+         for(var i=0; i<Object.keys(abc).length; i++){
+         	var route_latlng = [];
+          var path_name = [];
+             for(var j=0; j<Object.keys(abc[i]).length; j++){
+             	if( (j==0) && (abc[i][j].busstopid == sorce_busstopid)){
+                flag=1;
+              }
+             	if( (Object.keys(abc[i]).length>2) && (j > 0) && (j< Object.keys(abc[i]).length -1) ){
+             		route_latlng.push({
+                     location: new google.maps.LatLng(abc[i][j].busstoplat,abc[i][j].busstoplng),
+                     stopover: false
+                });
+                path_name.push({
+                  bus_name:abc[i][j].busname,
+                  busstop_name:abc[i][j].busstopname
+                });
+                }
+             	} 
+              mainpath.push(path_name);
+          	}  
+
+
+            if(flag==1){
+              
+              show_near_busStop(sourceBusStop,destinationBusStop,route_latlng);
+               
+            }
+            else
+            {
+
+              show_near_busStop(destinationBusStop,sourceBusStop,route_latlng);
+               
+            }
+          	
+            console.log(" ");
+         
+
+
+        console.log(mainpath);
+        var newx = document.createElement("H1");
+        var txtnode = document.createTextNode("Found "+mainpath.length+" Bus Service");
+        newx.appendChild(txtnode);
+        document.getElementById('info').appendChild(newx);
+
+        var btn = document.createElement("BUTTON");
+        var txt = document.createTextNode("click");
+        btn.appendChild(txt);
+        document.body.appendChild(btn);
+
+        //setAttribute("id", "Div1");
+
+        for(var m=0;m<Object.keys(mainpath).length;m++){
+          for(var n=0;n<Object.keys(mainpath[m]).length;n++){
+              console.log(mainpath[m][n].bus_name);
+              console.log(mainpath[m][n].busstop_name);
+          }
+
+        }
+
+
+        
+        //console.log(xyz_main[0].location[1]);
+        //console.log(xyz_main[0].location[2]);
+
+      }
+
+
+      function show_near_busStop(sourceA,destinationA,waypts){
+
+       var colors = ['#ff2d37','#1769ff','#34bf49','#8e43e7'];
+       
+
+       new google.maps.Marker({
+                  position: sourceA,
+                  map: map,
+                  icon:"img/bus_stop_32.png",
+                  title: "Near BusStop"
+                });
+        var pointA = sourceA,
+        pointB = destinationA,
+        myOptions = {
+          zoom: 7,
+          center: pointA
+        },
+
+      
+      // Instantiate a directions service.
+        directionsService = new google.maps.DirectionsService,
+        directionsDisplay = new google.maps.DirectionsRenderer({
+          map: map,
+          suppressMarkers: true
+        });
+
+        // get route from A to B
+        
+         /*var waypts = [{location: "New Market ,dhaka", stopover: true},{location: "Science Lab,dhaka", stopover: true},{location: "Kalabagan bus stop,dhaka", stopover: true},{location: "Shukrabad bus stop,dhaka", stopover: true},{location: "Syamoli bus stop,dhaka", stopover: true},{location: "Agargaon bus stop,dhaka", stopover: true},{location: "Shewrapara bus stop,dhaka", stopover: true},{location: "Kazipara,dhaka", stopover: true}];
+       /* var waypts = [{location: "Kazipara Bus Stop,Dhaka", stopover: false},{location: "ShewraPara Bus Stand,Dhaka", stopover: false},{location: "Agargaon Bus Stop, Dhaka", stopover: false},{location: "Shyamoli Bus Stop,Dhaka", stopover: false},{location: "Shukrabad Bus Stop, Dhaka", stopover: false},{location: "Kalabagan Bus Stop, Dhaka", stopover: false},{location: "Science Lab Bus Stop, Dhaka", stopover: false},{location: "New Market,Dhaka", stopover: false}];*/
+       
+        calculateAndDisplayRoute(directionsService, directionsDisplay, pointA, pointB,waypts);
+        
+
+        //Not needed
+        if(100 > 100000){
+          var bounds = new google.maps.LatLngBounds();
+          new google.maps.Marker({
+                  position: pointA,
+                  map: map,
+                  icon:"img/user_location_32.png",
+                  title: "Near BusStop"
+                });
+
+          new google.maps.Marker({
+                  position: pointB,
+                  map: map,
+                  icon:"img/bus_stop_32.png",
+                  title: "Near BusStop"
+                });
+
+          bounds.extend(pointA);
+          map.fitBounds(bounds);
+
+        }
+       
+
+         
+        function calculateAndDisplayRoute(directionsService, directionsDisplay, pointA, pointB,waypts) {
+         console.log(waypts);
+            directionsService.route({
+              origin: pointA,
+              destination: pointB,
+              waypoints: waypts, 
+          	  optimizeWaypoints: true,
+              provideRouteAlternatives: false,
+              travelMode: google.maps.TravelMode.DRIVING,
+              unitSystem: google.maps.UnitSystem.METRIC
+            }, function(response, status) {
+              if (status == google.maps.DirectionsStatus.OK) {
+
+                for (var i = 0, len = response.routes.length; i < len; i++) {
+
+                 new google.maps.DirectionsRenderer({
+                    map: map,
+                    suppressMarkers: false,
+                    directions: response,
+                    routeIndex: i,
+                    polylineOptions:{strokeColor:colors[i],strokeWeight:4,strokeOpacity:0.8}
+
+                  });
+                  var x =i+1;
+                  var center_point = response.routes[i].overview_path.length/2;
+                  var infowindow2 = new google.maps.InfoWindow();
+                  if(response.routes[i].legs[0].distance.value <= 500){
+                    infowindow2.setContent(response.routes[i].legs[0].distance.text + "<br>" + response.routes[i].legs[0].duration.text + " <br>" + "Travel: Walking"+ " <br>" + "Route: "+ x );
+                  }
+                  else if(response.routes[i].legs[0].distance.value > 500 && response.routes[i].legs[0].distance.value <= 3000){
+                    infowindow2.setContent(response.routes[i].legs[0].distance.text + "<br>" + response.routes[i].legs[0].duration.text + " <br>" + "Travel: Rickshaw"+ " <br>" + "Route: "+ x );
+                  }
+                  else{
+                    infowindow2.setContent(response.routes[i].legs[0].distance.text + "<br>" + response.routes[i].legs[0].duration.text + " <br>" + "Travel: Others"+ " <br>" + "Route: "+ x );
+                  }
+                  infowindow2.setPosition(response.routes[i].overview_path[center_point|i]);
+                  infowindow2.open(map);
+                  
+                }
+
+                new google.maps.Marker({
+                  position: pointB,
+                  map: map,
+                  icon:"img/bus_stop_32.png",
+                  title: "Near BusStop"
+                });
+                
+              } else {
+                window.alert('Directions request failed due to ' + status);
+              }
+            });
+          }
+    }
+
+
+      function all_BusStop_details(){
+          var bus_stop_details = new Array();
+          var abc =  $.ajax({
+                        type: 'POST',
+                        url: 'save/busstoplocation.php', 
+                        data:"",
+                        async: false,
+                        success: function(msg) {
+                          if (msg) {                 
+                          } else {
+                            console.log("Very Bad"); 
+                          }
+                        }
+                  }).responseText;
+     
+          bus_stop_details=JSON.parse(abc);
+          //console.log(bus_stop_details);
+
+          return bus_stop_details; 
+
+    }
+
+    function find_near_BusStop_latlng(sourcePoint){
+
+      var busStopDetails = all_BusStop_details();
+      var busStopDistance = new Array();
+
+      for(var i=0; i<Object.keys(busStopDetails).length; i++){
+
+          var a = google.maps.geometry.spherical.computeDistanceBetween(new google.maps.LatLng(sourcePoint), new google.maps.LatLng(busStopDetails[i].lat, busStopDetails[i].lng)); 
+          //console.log(a);
+          busStopDistance.push(a);
+
+      }
+      var sortDistanceBusStop =  Math.min.apply(null,busStopDistance);
+      console.log(sortDistanceBusStop);
+
+      for(var i=0; i<Object.keys(busStopDistance).length; i++){
+
+          if(sortDistanceBusStop==busStopDistance[i]){
+            var latlng ={lat:busStopDetails[i].lat, lng:busStopDetails[i].lng};
+            return {busstopid:busStopDetails[i].id,latlng:latlng,distance:sortDistanceBusStop};
+          }
+      }
+      
+  }  
+    
+  //window.onload=get_source_destination_nearest();
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBpJmjhszpHAG4O_XAxqC8cS9Ij0XSPyzI&libraries=places&callback=initMap"
+        async defer></script>
+  </body>
+</html>
+
